@@ -1,0 +1,7 @@
+# 装依赖时必须加 --no-cache-dir：本机 pip 缓存目录在工作区外，
+# 沙箱下不可写，pip 会卡在写缓存那一步（表现为「Looking in indexes」后没动静）。
+#   .venv\Scripts\python.exe -m pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
+
+requests>=2.31
+segno>=1.6
+tzdata>=2024.1      # Windows 上 zoneinfo 缺 IANA 数据库，需要这个包

@@ -1,0 +1,22 @@
+# 运行环境
+.venv/
+__pycache__/
+*.pyc
+
+# 绝不可入库
+secrets.toml
+.env
+state/
+logs/
+reports/
+assets/
+
+# 临时文件
+*.tmp
+*.log
+
+# 测试临时目录
+bili-test-*/
+qa-*/
+att*/
+tmp*/

@@ -1,0 +1,203 @@
+# bili-pet 行为配置
+# 密钥不写在这里：见文件末尾「密钥查找顺序」
+
+[account]
+# 宠物号。真实值在 secrets.toml 的 [account]，这里是占位符
+uid = 0
+name = ""
+
+
+[run]
+# shadow：只读 + 写日报，不发任何东西。P2 未实现，此处只接受 shadow
+mode = "shadow"
+timezone = "Asia/Shanghai"
+
+[schedule]
+# 固定钟点轮已废弃：只保留「开机即跑」。
+# 留空表示不设任何时间窗；有一个轮次的话只有落在窗内才跑。
+windows = []
+# 启动后随机延迟（分钟）上限，避免每次开机都在同一分钟开始
+jitter_minutes = 2
+
+[session]
+# 常驻模式（daemon）：开机启动，关机结束，中间一直盯着私信
+# 私信轮询间隔（秒）+ 抖动：45 秒 + 0~15 秒随机。
+# 每次轮询只发 1~3 个读请求，折算约 0.02~0.06 请求/秒——比手机 App 后台刷新还低。
+dm_poll_seconds = 45
+# 抖动上限（秒）：固定节拍本身是机器人特征，随机一点更像人
+poll_jitter_seconds = 15
+# 多久才检查一次「对方未回复前最多 1 条」的提示（每 N 轮），平时省掉 2 个请求
+limit_check_every = 20
+
+[daemon]
+enabled = true
+# 每隔多久跑一次「完整流程」（推荐流 → 筛选 → 发言 → 日报 → 邮件）
+# 只在 8:00~23:00 之间跑；私信回复不受这个限制
+main_interval_minutes = 360
+
+[guard]
+# 只在插电时跑
+require_ac_power = true
+# 每次运行先空探一次 B 站接口：返回不是 JSON（校园网认证页劫持）就安静退出
+network_preflight = true
+
+# 每小时天花板（短时频率才是风控真正看的）：0 = 不限
+# read 目前只记账不硬拦（45 秒轮询约 240 次/小时）；write/llm 是硬的，超了直接拒绝。
+[guard.hourly]
+read = 600
+write = 12
+llm = 80
+
+# 每日预算，一天多场共用同一份计数（上限 = 第二个数）
+# 点赞/收藏给一个足够宽的上限，真正的节流靠两条之间的间隔。
+[guard.daily_budget]
+like = [0, 10]
+favorite = [0, 10]
+# 投币：接口要人机验证（-401 ga_data），脚本不自动过验证
+coin = [0, 4]
+# 评论：走浏览器 DOM（API 那条路已被证明永远影子隐藏）。
+# 每天最多 10 条，但实际由 [speak].comment_chance 摇骰子决定，绝大多数轮次不发。
+comment = [0, 10]
+# 给评论点赞（楼中楼回完顺手点一个）
+comment_like = [0, 10]
+# 动态：只对「不 @ 人」的评论勾选同步，方便事后审核
+dynamic = [0, 10]
+dm = [0, 30]
+
+# 硬上限：**任何情况下都不突破**。白名单的特殊请求可以跳过上面的日常预算，
+# 但永远受这里约束——防止你俩同时疯狂点单把号玩坏。
+[guard.hard_limits]
+comment = 30
+like = 60
+favorite = 30
+coin = 20
+dm = 60
+dynamic = 30
+comment_like = 30
+reply_strangers = 5
+
+[actions]
+# 收藏进哪个夹子（按名字找，找不到就报错，不猜）
+fav_folder = "我的收藏"
+# 点赞/收藏/投币之间的间隔（秒）：不做高频连点
+engage_gap_seconds = [20, 45]
+# 每一轮实际动手的概率。**上限不是配额**：没看到值得动的就不动，
+# 上面 daily_budget 只是天花板，不是每天必须花完的额度。
+like_chance = 0.55
+favorite_chance = 0.35
+# 注意：投币接口（/x/web-interface/coin/add）对这只号返回 -401「非法访问」，
+# 风控决策要求人机验证（ga_data）。脚本不自动过验证，所以上面 coin 预算先设 0；
+# 想试就把它改成 [0, 5]，失败会在日报里记「需要人机验证，跳过」。
+
+[speak]
+# 每个时间段的「头」和「尾」各发一波；一波最多几条
+enabled = true
+per_batch = 4
+reply_per_run = 5
+# 两条发言之间的随机间隔（秒）——不连发是硬要求，不是优化
+gap_seconds = [60, 150]
+# 每一轮开口的概率。限额是上限，不是"每天必须发满几条"。
+# 有想说的才说，不想说就安静过一轮。
+chat_chance = 0.45
+share_chance = 0.55
+# 分享前给视频打分（0~20），低于这个分就不发。宁可一天不分享，也不凑数。
+min_share_score = 12
+# 沉默衰减：连续这么多天没人跟它说话 → 分享概率减半；再久 → 完全不分享（日报照写）
+silence_half_days = 3
+silence_zero_days = 7
+# 发评论后同步转发一条动态（需要 [guard.daily_budget].dynamic 有余量）
+# 单条评论是否勾选由代码按规则决定：带 @ 的不勾，不 @ 的才勾
+sync_dynamic = true
+# 每轮要不要发评论：摇骰子，不中就不发（10 条/天只是天花板）
+comment_chance = 0.5
+# @ 你：每人每天最多几次
+at_per_person = 2
+
+[comment]
+# 评论有独立节拍：每 interval_minutes 掷一次骰子，中了就发 1 条
+interval_minutes = 120
+chance = 0.65
+
+[reply]
+# 楼中楼回复：只回白名单里的人，每人每天 ≤5 次；陌生人只记录不回
+enabled = true
+# 回完之后顺手给对方的评论点个赞（每天总上限）
+like_replies = true
+per_person_per_day = 5
+max_per_tick = 2
+
+[reply.strangers]
+# 陌生人回复：只回一次，不展开对话
+enabled = true
+per_day = 3
+per_person_per_day = 1
+only_questions = true
+
+[taste]
+# 口味画像打分：分享前先算「这条像不像你的口味」，不够分就不发
+enabled = true
+# 你的及格分（0 = 只要它自己觉得好就能发给你，混入它自己的内容）
+min_score_admin = 0.0
+# 及格分（宁缺毋滥：命中一个 1.5% 以上的兴趣组才发）
+# 判定「这条是你们的口味」的线：过了就只 @ 不互动；没过就当作它自己的口味，正常互动
+min_score_ours = 1.0
+# 判定「这是它自己的口味」的线（DeepSeek/大肥鱼/整活这类）
+min_score_self = 1.5
+
+[seed]
+# 养推荐流：每天真播几条目标分区的视频，让 B 站推荐慢慢回到你们的兴趣区
+enabled = true
+per_day = 3
+seconds = 25
+interval_minutes = 240
+
+[watch]
+# 发评论前真播多少秒（0 = 不播）。360P 下 30 秒约 0.2MB
+enabled = true
+seconds = 30
+quality = 16
+
+[llm]
+provider = "deepseek"
+base_url = "https://api.deepseek.com"
+model = "deepseek-chat"
+# 留空即按「密钥查找顺序」回退
+api_key = ""
+max_calls_per_run = 12
+temperature = 1.0
+
+[p1]
+# 推荐流取几页 → 规则粗筛留几条 → AI 细筛留几条
+feed_pages = 2
+coarse_keep = 12
+fine_keep = 5
+max_comment_drafts = 3
+# 去重窗口（天）：同一个视频这段时间内不再看/再分享。0 = 永久去重
+seen_days = 7
+
+[logging]
+level = "INFO"
+
+[paths]
+state = "state"
+logs = "logs"
+reports = "reports"
+
+# 密钥查找顺序（先命中先用，全部不回显、不入库、不进日志）：
+#   1. 环境变量 BILI_PET_LLM_KEY
+#   2. secrets.toml 的 [llm].api_key
+#   3. 工作区 .env 里的 BILI_PET_LLM_KEY=...
+
+[targets]
+# 白名单：只有这两个 UID 能收到私信 / 被 @。
+# 真实值放在 secrets.toml 的 [targets]，这里是占位符（0 会启动失败）
+admin_uid = 0
+report_mail = ""
+
+
+[mail]
+# 发件账号与授权码在 secrets.toml（[mail].username / [mail].password）
+server = "smtp.163.com"
+port = 465
+use_ssl = true
+enabled = true
